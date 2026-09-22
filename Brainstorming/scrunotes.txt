@@ -1,0 +1,35 @@
+
+todays task is 
+Module 1: Data Collection & Ingestion (Backbone)
+Goal: Build the active triage system to move files from the user to secure storage with 100% data integrity.
+
+Member
+Task Title
+Responsibilities
+Success Metric
+Dev A:
+
+Schema & Database
+Set up PostgreSQL with normalized business schemas (orders, products) and a transactional Outbox table.
+SQL query returns valid data from a test insert.
+
+Dev B:
+
+Object Storage
+Deploy S3/MinIO and build the service to handle raw Excel/PDF uploads.
+File is retrievable via a unique ID after upload.
+
+Dev C:
+
+Active Triage Agent
+Build the Validation Engine (Pandas/Pydantic) to check schema health and assign confidence thresholds.
+Correctly rejects a "Bad Schema" Excel file.
+
+Dev D:
+
+Security Gateway
+Implement JWT Auth and a PII Redaction layer to scrub sensitive seller data before ingestion.
+Log files show [REDACTED] for sensitive names.
+
+
+

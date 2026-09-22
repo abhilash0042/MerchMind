@@ -1,0 +1,144 @@
+name: commercepulse
+
+# ──────────────────────────────────────────────────────────────
+# CommercePulse — Supabase + Celery + Redis
+#
+# All services share the default bridge network so they can
+# reach each other by service name (e.g. redis, ai_agents).
+# Ports are mapped to the host for browser access.
+# ──────────────────────────────────────────────────────────────
+
+services:
+
+  # ── Redis — Message Broker ──────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: commercepulse_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ── FastAPI — Ingestion + Analytics API ────────────────────
+  ingestion:
+    image: commercepulse_ingestion
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: commercepulse_ingestion
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8010:8000"
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      APP_ENV: ${APP_ENV:-development}
+      API_KEY: ${API_KEY:-dev-api-key}
+      REDIS_URL: redis://redis:6379/0
+      AI_AGENTS_URL: http://ai_agents:8001
+    volumes:
+      - ./app:/app/app:ro
+      - model_cache:/root/.cache/huggingface
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # ── Celery Worker — Processes Embedding Tasks ───────────────
+  celery_worker:
+    image: commercepulse_worker
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: commercepulse_worker
+    restart: unless-stopped
+    command: >
+      celery -A workers.celery_app worker
+        --loglevel=info
+        --queues=embed
+        --concurrency=1
+        --hostname=worker@%h
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      APP_ENV: ${APP_ENV:-development}
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - ./app:/app/app:ro
+      - ./workers:/app/workers:ro
+      - model_cache:/root/.cache/huggingface
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # ── Celery Beat — Nightly Scheduler ────────────────────────
+  celery_beat:
+    image: commercepulse_beat
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: commercepulse_beat
+    restart: unless-stopped
+    command: >
+      celery -A workers.celery_app beat
+        --loglevel=info
+        --scheduler celery.beat:PersistentScheduler
+        --schedule /tmp/celerybeat-schedule
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      APP_ENV: ${APP_ENV:-development}
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - celery_beat_data:/tmp
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # ── AI Agents — LangGraph Engine (internal only) ────────────
+  ai_agents:
+    image: commercepulse_ai_agents
+    build:
+      context: ../ai_agents
+      dockerfile: Dockerfile
+    container_name: commercepulse_ai_agents
+    restart: unless-stopped
+    env_file:
+      - ../ai_agents/.env
+    environment:
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      APP_ENV: ${APP_ENV:-development}
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001"]
+    volumes:
+      - ../ai_agents/app:/app/app:ro
+      - ../ai_agents/main.py:/app/main.py:ro
+    ports:
+      - "8001:8001"
+
+volumes:
+  model_cache:
+    name: commercepulse_model_cache
+  celery_beat_data:
+    name: commercepulse_beat_data

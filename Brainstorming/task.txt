@@ -1,0 +1,3 @@
+Today my task is to complete the connection of frontend is backend integration 
+
+and full working of commercepluse project 

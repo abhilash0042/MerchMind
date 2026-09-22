@@ -1,0 +1,16 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/:match*",
+      "destination": "https://thundarstrom-ecommerce.hf.space/:match*"
+    },
+    {
+      "source": "/ai-api/:match*",
+      "destination": "https://thundarstrom-ecommerceaiagents.hf.space/api/v1/:match*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
