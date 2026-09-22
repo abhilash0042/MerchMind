@@ -42,7 +42,15 @@ async def ai_chat(
         logger.error(f"Failed to initialize chat agent: {e}")
         raise HTTPException(status_code=500, detail="Failed to initialize chat agent")
 
-    ctx = request.context
+    ctx = dict(request.context or {})
+    try:
+        from app.routes.analytics import dashboard_summary
+        live = await dashboard_summary(seller_id=seller_id, days=30, db=db, _scope=seller_id)
+        if isinstance(live, dict):
+            ctx = {**live, **ctx}
+    except Exception as exc:
+        logger.warning("Could not hydrate chat dashboard context: %s", exc)
+
     total_rev = ctx.get('total_revenue') or 0
     total_ord = ctx.get('total_orders') or 0
     ret_rate  = ctx.get('return_rate_pct') or 0
@@ -51,7 +59,7 @@ async def ai_chat(
 
     context_str = f"""
 - Seller ID: {seller_id}
-- Total Revenue (Current Available Data): ₹{total_rev:,.2f}
+- Total Revenue (last 30 days of data): ₹{float(total_rev):,.2f}
 - Total Orders: {total_ord}
 - Return Rate: {ret_rate}%
 - Avg Margin: {avg_mrg}%
@@ -59,6 +67,7 @@ async def ai_chat(
 - Current Page Path: {ctx.get('current_page', 'Dashboard')}
 - Current Product ID (if applicable): {ctx.get('product_id', 'None')}
 - Current Product Name (if applicable): {ctx.get('product_name', 'None')}
+You can still call tools for inventory, ads, logistics, customers, payments, and product detail.
 """
     
     chat_history = []

@@ -5,10 +5,11 @@ import remarkGfm from "remark-gfm";
 import { ensureSeller, apiClient } from "../services/api";
 
 const sampleQuestions = [
-  "What's my revenue trend this month?",
+  "What's my revenue by marketplace?",
   "Show me my top selling products",
   "Are there any low stock items?",
   "What is my overall ROAS?",
+  "How is payments reconciliation looking?",
 ];
 
 export function AIAssistant() {
@@ -20,7 +21,7 @@ export function AIAssistant() {
   const [messages, setMessages] = useState<Array<{ type: "user" | "ai" | "system"; text: string }>>([
     {
       type: "ai",
-      text: "👋 Hi! I'm your Brew Boulevard AI Business Analyst. I've analyzed your latest dashboard metrics. What would you like to know about your revenue, inventory, or ad performance?",
+      text: "👋 Hi! I'm your Brew Boulevard AI Business Analyst. Ask me about revenue, products, inventory, ads/ROAS, logistics, customers, payments, or any SKU — I'll pull live numbers.",
     },
   ]);
   const [inputValue, setInputValue] = useState("");

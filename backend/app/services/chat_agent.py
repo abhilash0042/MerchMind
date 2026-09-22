@@ -21,6 +21,18 @@ def _custom_json_encoder(obj):
     raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
 
 
+def _to_json(payload, limit: int | None = None) -> str:
+    data = payload
+    if isinstance(payload, dict):
+        data = dict(payload)
+        for key in ("data", "alerts"):
+            if isinstance(data.get(key), list) and limit:
+                data[key] = data[key][:limit]
+    elif isinstance(payload, list) and limit:
+        data = payload[:limit]
+    return json.dumps(data, default=_custom_json_encoder)
+
+
 def _build_tools(default_seller_id: str):
     @tool
     async def fetch_live_product_roas(product_id: str) -> str:
@@ -79,16 +91,107 @@ def _build_tools(default_seller_id: str):
 
     @tool
     async def fetch_payments_summary(seller_id: str = "") -> str:
-        """Brew Boulevard Razorpay settlements: match rate, unmatched coffee GMV, exceptions. Use for payouts, STL, UTR, MDR, bank credits."""
+        """Razorpay settlements: match rate, unmatched GMV, exceptions. Use for payouts, STL, UTR, MDR, bank credits."""
         from app.routes.payments import latest_summary
         from app.db.session import AsyncSessionLocal
         sid = seller_id or default_seller_id
         try:
             async with AsyncSessionLocal() as db:
                 res = await latest_summary(seller_id=sid, db=db, _scope=sid)
-                return f"Payments reconciliation: {json.dumps(res, default=_custom_json_encoder)}"
+                return f"Payments reconciliation: {_to_json(res)}"
         except Exception as e:
             return f"Could not fetch payments summary: {str(e)}."
+
+    @tool
+    async def fetch_dashboard_kpis(seller_id: str = "") -> str:
+        """Overall KPIs: revenue, orders, cancellations, returns, low stock, RTO, ROAS. Use for overview / how is business doing."""
+        from app.routes.analytics import dashboard
+        from app.db.session import AsyncSessionLocal
+        sid = seller_id or default_seller_id
+        try:
+            async with AsyncSessionLocal() as db:
+                res = await dashboard(seller_id=sid, days=30, db=db, _scope=sid)
+                return f"Dashboard KPIs: {_to_json(res)}"
+        except Exception as e:
+            return f"Could not fetch dashboard KPIs: {str(e)}."
+
+    @tool
+    async def fetch_revenue_by_marketplace(seller_id: str = "") -> str:
+        """Revenue, orders, AOV, discounts by marketplace. Use for channel mix and revenue trend questions."""
+        from app.routes.analytics import revenue_summary
+        from app.db.session import AsyncSessionLocal
+        sid = seller_id or default_seller_id
+        try:
+            async with AsyncSessionLocal() as db:
+                res = await revenue_summary(seller_id=sid, days=30, db=db, _scope=sid)
+                return f"Revenue by marketplace: {_to_json(res)}"
+        except Exception as e:
+            return f"Could not fetch revenue: {str(e)}."
+
+    @tool
+    async def fetch_inventory_alerts(seller_id: str = "") -> str:
+        """Low-stock and stockout SKUs. Use for inventory, reorder, stockout questions."""
+        from app.routes.analytics import inventory_alerts
+        from app.db.session import AsyncSessionLocal
+        sid = seller_id or default_seller_id
+        try:
+            async with AsyncSessionLocal() as db:
+                res = await inventory_alerts(seller_id=sid, db=db, _scope=sid)
+                return f"Inventory alerts: {_to_json(res, limit=20)}"
+        except Exception as e:
+            return f"Could not fetch inventory alerts: {str(e)}."
+
+    @tool
+    async def fetch_ad_performance(seller_id: str = "") -> str:
+        """Ads funnel: impressions, CTR, conversion, ad spend, ROAS by SKU. Use for ads, ROAS, marketing spend."""
+        from app.routes.analytics import traffic_funnel
+        from app.db.session import AsyncSessionLocal
+        sid = seller_id or default_seller_id
+        try:
+            async with AsyncSessionLocal() as db:
+                res = await traffic_funnel(seller_id=sid, days=30, db=db, _scope=sid)
+                return f"Ad / traffic performance: {_to_json(res, limit=20)}"
+        except Exception as e:
+            return f"Could not fetch ad performance: {str(e)}."
+
+    @tool
+    async def fetch_logistics_performance(seller_id: str = "") -> str:
+        """RTO rate, delivery counts, shipping days by marketplace. Use for logistics, RTO, delivery SLAs."""
+        from app.routes.analytics import logistics_rto_rate
+        from app.db.session import AsyncSessionLocal
+        sid = seller_id or default_seller_id
+        try:
+            async with AsyncSessionLocal() as db:
+                res = await logistics_rto_rate(seller_id=sid, days=30, db=db, _scope=sid)
+                return f"Logistics / RTO: {_to_json(res)}"
+        except Exception as e:
+            return f"Could not fetch logistics: {str(e)}."
+
+    @tool
+    async def fetch_top_customers(seller_id: str = "") -> str:
+        """Top customers by spend. Use for customers, repeat buyers, VIP accounts."""
+        from app.routes.analytics import customers_summary
+        from app.db.session import AsyncSessionLocal
+        sid = seller_id or default_seller_id
+        try:
+            async with AsyncSessionLocal() as db:
+                res = await customers_summary(seller_id=sid, limit=15, db=db, _scope=sid)
+                return f"Top customers: {_to_json(res, limit=15)}"
+        except Exception as e:
+            return f"Could not fetch customers: {str(e)}."
+
+    @tool
+    async def fetch_pricing_margins(seller_id: str = "") -> str:
+        """Selling price, cost, commission, margin % by SKU. Use for margin, pricing, profitability."""
+        from app.routes.analytics import pricing_margins
+        from app.db.session import AsyncSessionLocal
+        sid = seller_id or default_seller_id
+        try:
+            async with AsyncSessionLocal() as db:
+                res = await pricing_margins(seller_id=sid, db=db, _scope=sid)
+                return f"Pricing / margins: {_to_json(res, limit=20)}"
+        except Exception as e:
+            return f"Could not fetch margins: {str(e)}."
 
     return [
         fetch_live_product_roas,
@@ -96,6 +199,13 @@ def _build_tools(default_seller_id: str):
         fetch_product_metrics,
         fetch_all_products_metrics,
         fetch_payments_summary,
+        fetch_dashboard_kpis,
+        fetch_revenue_by_marketplace,
+        fetch_inventory_alerts,
+        fetch_ad_performance,
+        fetch_logistics_performance,
+        fetch_top_customers,
+        fetch_pricing_margins,
     ]
 
 
@@ -187,24 +297,28 @@ def get_chat_agent(seller_id: str = ""):
 
     tools = _build_tools(seller_id)
 
-    system_prompt = """You are an elite, highly aggressive Senior Business Analyst & Strategist for a D2C brand named "Brew Boulevard". 
-Your job is to answer the user's questions strictly based on their real data.
-Be concise, highly professional, use bullet points if needed, and reference actual Rs amounts, percentages, and units.
+    system_prompt = """You are the Brew Boulevard AI Business Analyst. Answer EVERY business question using live tools plus the snapshot below. Never say you cannot access data if a tool exists.
 
-Here is the LIVE DATA context for Brew Boulevard:
+LIVE SNAPSHOT:
 {context_str}
 
-If the user asks about a specific product, and you have its product_id, USE YOUR TOOLS to fetch live metrics, inventory, or ROAS for it before answering.
+Always pick the right tool before answering (you may call more than one):
+- Overview / how is business / KPIs → fetch_dashboard_kpis
+- Revenue / marketplace split / AOV → fetch_revenue_by_marketplace
+- Top products / SKU performance → fetch_all_products_metrics
+- One product (name, SKU, or product_id) → fetch_product_metrics
+- Inventory / low stock / stockouts → fetch_inventory_alerts
+- Ads / ROAS / spend / CTR → fetch_ad_performance
+- Logistics / RTO / delivery days → fetch_logistics_performance
+- Customers / top buyers → fetch_top_customers
+- Margins / pricing / profitability → fetch_pricing_margins
+- Payouts / Razorpay / settlements / UTR / MDR / unmatched cash → fetch_payments_summary
 
 Rules:
-1. Do not hallucinate metrics. Assume the LIVE DATA provided is the most current and relevant data for the user's query.
-2. Be aggressive about growth and protecting margins. Focus on profitability, ROAS optimization, and high-impact actions.
-3. Keep responses under 200 words unless explaining a complex multi-step strategy.
-4. Always reference actual financial numbers (Rs amounts) to back up your claims.
-5. Provide extremely actionable, data-driven advice for D2C scaling.
-6. If the user asks about a specific product, USE your `fetch_product_metrics` tool to get the full picture, do NOT just guess.
-If the user asks about payouts, Razorpay, settlements, UTR, STL batches, MDR, GST on fees, unmatched cash, or bank credits, USE `fetch_payments_summary`.
-8. If the user asks about overall product metrics, top selling products, or general catalog queries, USE the `fetch_all_products_metrics` tool to get the full product catalog metrics before answering. Use the Seller ID from the context.
+1. Never invent numbers. If a tool returns empty, say so and suggest Data Import.
+2. Quote rupees, units, and percentages from the tool results.
+3. Keep answers under 180 words with bullets and one recommended action.
+4. If the question is unclear, still answer with dashboard KPIs and ask a short follow-up.
 """
 
     try:
