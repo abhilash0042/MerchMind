@@ -1,4 +1,4 @@
-@custom-variant dark (&:is(.dark *));
+@custom-variant dark (&:where(.dark, .dark *));
 
 :root {
   --font-size: 16px;
@@ -179,4 +179,99 @@
     font-weight: var(--font-weight-normal);
     line-height: 1.5;
   }
+}
+
+/* ── Sleek Custom Scrollbar for Sidebar ── */
+.sidebar-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(156, 163, 175, 0.3) transparent;
+}
+
+.sidebar-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.sidebar-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(156, 163, 175, 0.3);
+  border-radius: 9999px;
+}
+
+.sidebar-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(156, 163, 175, 0.6);
+}
+
+.dark .sidebar-scrollbar {
+  scrollbar-color: rgba(115, 115, 115, 0.4) transparent;
+}
+
+.dark .sidebar-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(115, 115, 115, 0.4);
+}
+
+.dark .sidebar-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(115, 115, 115, 0.7);
+}
+
+/* ── Global Dark Mode Styling Polish ── */
+.dark {
+  color-scheme: dark;
+}
+
+.dark .bg-white {
+  background-color: #171717;
+}
+
+.dark .bg-gray-50 {
+  background-color: #0c0a09;
+}
+
+.dark .bg-gray-100 {
+  background-color: #262626;
+}
+
+.dark .border-gray-100,
+.dark .border-gray-200 {
+  border-color: #262626;
+}
+
+.dark .text-gray-900 {
+  color: #f5f5f5;
+}
+
+.dark .text-gray-800,
+.dark .text-gray-700 {
+  color: #e5e5e5;
+}
+
+.dark .text-gray-600,
+.dark .text-gray-500 {
+  color: #a3a3a3;
+}
+
+.dark .text-gray-400 {
+  color: #737373;
+}
+
+.dark .hover\:bg-gray-50:hover {
+  background-color: #262626 !important;
+}
+
+.dark .hover\:bg-gray-100:hover {
+  background-color: #303030 !important;
+}
+
+.dark .shadow-sm {
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.5);
+}
+
+.dark .shadow-md {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.6);
+}
+
+.dark .shadow-xl {
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.7);
 }
