@@ -34,13 +34,18 @@ class Settings(BaseSettings):
     # Restart the API after changing AI_AGENTS_URL in .env.
     AI_AGENTS_URL: str = "http://127.0.0.1:8002"
 
-    # Groq API Key
+    # Groq API Key (optional fallback for chat)
     GROQ_API_KEY: str = Field(..., env="GROQ_API_KEY")
     GROQ_API_KEY_2: str = ""
     GROQ_API_KEY_3: str = ""
     FALLBACK_GROQ_API_KEY: str = ""
     GROQ_CHAT_MODEL: str = "openai/gpt-oss-20b"
     GROQ_FALLBACK_MODEL: str = "openai/gpt-oss-120b"
+
+    # OpenRouter (AI assistant chatbot — preferred when set)
+    OPENROUTER_API_KEY: str = ""
+    OPENROUTER_CHAT_MODEL: str = "openai/gpt-4o-mini"
+    OPENROUTER_FALLBACK_MODEL: str = "google/gemini-2.0-flash-001"
 
     @property
     def _pw(self) -> str:
@@ -107,6 +112,7 @@ for _name, _val in (
     ("GROQ_API_KEY_2", settings.GROQ_API_KEY_2),
     ("GROQ_API_KEY_3", settings.GROQ_API_KEY_3),
     ("FALLBACK_GROQ_API_KEY", settings.FALLBACK_GROQ_API_KEY),
+    ("OPENROUTER_API_KEY", settings.OPENROUTER_API_KEY),
     ("AI_AGENTS_URL", settings.AI_AGENTS_URL),
 ):
     if _val:

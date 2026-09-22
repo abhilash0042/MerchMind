@@ -91,8 +91,10 @@ You can still call tools for inventory, ads, logistics, customers, payments, and
         # Detect rate limit errors and return a graceful message instead of 500
         if "429" in error_str or "rate limit" in error_str or "rate_limit" in error_str:
             return {"reply": "⏳ **Rate Limit Reached** — The AI engine is currently experiencing high demand across all available API keys. Please wait **30 seconds** and try again. Your data is safe and ready to analyze.\n\n*Tip: Shorter, focused questions use fewer tokens and are less likely to be rate-limited.*"}
+        if "key limit exceeded" in error_str or "credit" in error_str:
+            return {"reply": "⚠️ **API quota exceeded** — The OpenRouter key is out of credits/limit. Add credits at openrouter.ai, or I will use the Groq fallback after a backend restart. Try again in a moment."}
         if "model_not_found" in error_str or "does not exist" in error_str:
-            return {"reply": "⚠️ **Model unavailable** — Groq retired the configured chat model. Update `GROQ_CHAT_MODEL` in backend `.env` to `openai/gpt-oss-20b` (or restart after pulling the latest backend code)."}
+            return {"reply": "⚠️ **Model unavailable** — Check `OPENROUTER_CHAT_MODEL` (or `GROQ_CHAT_MODEL`) in backend `.env` and restart the API."}
         raise HTTPException(status_code=500, detail=str(e))
 
 

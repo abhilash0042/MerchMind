@@ -193,6 +193,54 @@ def _build_tools(default_seller_id: str):
         except Exception as e:
             return f"Could not fetch margins: {str(e)}."
 
+    @tool
+    async def fetch_orders_stats(seller_id: str = "") -> str:
+        """Order counts by status (pending, shipped, delivered, cancelled). Use for order pipeline questions."""
+        from app.routes.analytics import orders_stats
+        from app.db.session import AsyncSessionLocal
+        sid = seller_id or default_seller_id
+        try:
+            async with AsyncSessionLocal() as db:
+                res = await orders_stats(seller_id=sid, days=30, db=db, _scope=sid)
+                return f"Order stats: {_to_json(res)}"
+        except Exception as e:
+            return f"Could not fetch order stats: {str(e)}."
+
+    @tool
+    async def fetch_revenue_by_category(seller_id: str = "") -> str:
+        """Revenue grouped by product category. Use for category mix / which categories sell best."""
+        from app.routes.analytics import revenue_by_category
+        from app.db.session import AsyncSessionLocal
+        sid = seller_id or default_seller_id
+        try:
+            async with AsyncSessionLocal() as db:
+                res = await revenue_by_category(seller_id=sid, days=30, db=db, _scope=sid)
+                return f"Revenue by category: {_to_json(res)}"
+        except Exception as e:
+            return f"Could not fetch category revenue: {str(e)}."
+
+    @tool
+    async def fetch_business_overview(seller_id: str = "") -> str:
+        """Catch-all for any business question. Returns KPIs, marketplace revenue, inventory alerts, and ads ROAS."""
+        from app.routes.analytics import dashboard, revenue_summary, inventory_alerts, traffic_funnel
+        from app.db.session import AsyncSessionLocal
+        sid = seller_id or default_seller_id
+        try:
+            async with AsyncSessionLocal() as db:
+                kpis = await dashboard(seller_id=sid, days=30, db=db, _scope=sid)
+                revenue = await revenue_summary(seller_id=sid, days=30, db=db, _scope=sid)
+                inventory = await inventory_alerts(seller_id=sid, db=db, _scope=sid)
+                ads = await traffic_funnel(seller_id=sid, days=30, db=db, _scope=sid)
+            payload = {
+                "kpis": kpis,
+                "revenue": revenue,
+                "inventory_alerts": inventory,
+                "ads": ads,
+            }
+            return "Business overview: " + _to_json(payload, limit=12)
+        except Exception as e:
+            return f"Could not fetch business overview: {str(e)}."
+
     return [
         fetch_live_product_roas,
         fetch_live_product_inventory,
@@ -206,6 +254,9 @@ def _build_tools(default_seller_id: str):
         fetch_logistics_performance,
         fetch_top_customers,
         fetch_pricing_margins,
+        fetch_orders_stats,
+        fetch_revenue_by_category,
+        fetch_business_overview,
     ]
 
 
@@ -243,17 +294,99 @@ def _collect_api_keys():
     return keys
 
 
+def _openrouter_key() -> str:
+    return (settings.OPENROUTER_API_KEY or os.getenv("OPENROUTER_API_KEY") or "").strip()
+
+
+def _build_openrouter_llm(or_key: str):
+    from langchain_openai import ChatOpenAI
+
+    headers = {
+        "HTTP-Referer": "http://127.0.0.1:4000",
+        "X-Title": "CommercePulse AI Assistant",
+    }
+    primary_model = (settings.OPENROUTER_CHAT_MODEL or "openai/gpt-4o-mini").strip()
+    fallback_model = (settings.OPENROUTER_FALLBACK_MODEL or "google/gemini-2.0-flash-001").strip()
+    models = [primary_model]
+    if fallback_model and fallback_model not in models:
+        models.append(fallback_model)
+    return [
+        ChatOpenAI(
+            model=model,
+            api_key=or_key,
+            base_url="https://openrouter.ai/api/v1",
+            temperature=0.2,
+            max_tokens=1600,
+            default_headers=headers,
+        )
+        for model in models
+    ]
+
+
+def _build_groq_llms():
+    api_keys = _collect_api_keys()
+    if not api_keys:
+        return []
+    primary_model = _resolve_groq_model(settings.GROQ_CHAT_MODEL, "openai/gpt-oss-20b")
+    fallback_model = _resolve_groq_model(settings.GROQ_FALLBACK_MODEL, "openai/gpt-oss-120b")
+    llms = [
+        ChatGroq(
+            api_key=api_keys[0],
+            model=primary_model,
+            temperature=0.2,
+            max_tokens=1200,
+        )
+    ]
+    second_key = api_keys[1] if len(api_keys) > 1 else api_keys[0]
+    if fallback_model != primary_model or second_key != api_keys[0]:
+        llms.append(
+            ChatGroq(
+                api_key=second_key,
+                model=fallback_model,
+                temperature=0.2,
+                max_tokens=1200,
+            )
+        )
+    return llms
+
+
+_skip_openrouter = False
+
+
+def _is_quota_error(exc: Exception) -> bool:
+    s = str(exc).lower()
+    return any(
+        token in s
+        for token in (
+            "key limit exceeded",
+            "insufficient credits",
+            "status code 403",
+            "error code: 403",
+            "rate limit",
+            "429",
+        )
+    )
+
+
+def _make_agent(llm, tools):
+    try:
+        return create_agent(model=llm, tools=tools)
+    except TypeError:
+        return create_agent(llm, tools)
+
+
 class ChatAgentWrapper:
     """
     Adapter providing an .ainvoke interface matching what ai.py expects:
     input dict: {"input": str, "chat_history": list, "context_str": str}
     output dict: {"output": str}
     """
-    def __init__(self, agent_runner, system_template: str):
+    def __init__(self, agent_runner, system_template: str, fallback_runner=None):
         self.agent_runner = agent_runner
+        self.fallback_runner = fallback_runner
         self.system_template = system_template
 
-    async def ainvoke(self, inputs: dict):
+    async def _run(self, runner, inputs: dict):
         user_input = inputs.get("input", "")
         chat_history = inputs.get("chat_history", [])
         context_str = inputs.get("context_str", "")
@@ -261,7 +394,7 @@ class ChatAgentWrapper:
         sys_text = self.system_template.replace("{context_str}", context_str)
         messages = [SystemMessage(content=sys_text)] + list(chat_history) + [HumanMessage(content=user_input)]
 
-        res = await self.agent_runner.ainvoke({"messages": messages})
+        res = await runner.ainvoke({"messages": messages})
         final_msg = res["messages"][-1]
         output_text = final_msg.content if hasattr(final_msg, "content") else str(final_msg)
         if isinstance(output_text, list):
@@ -270,62 +403,66 @@ class ChatAgentWrapper:
             )
         return {"output": output_text}
 
+    async def ainvoke(self, inputs: dict):
+        global _skip_openrouter
+        try:
+            return await self._run(self.agent_runner, inputs)
+        except Exception as exc:
+            if self.fallback_runner and _is_quota_error(exc):
+                logger.warning("Primary chat LLM failed (%s); retrying on Groq", exc)
+                _skip_openrouter = True
+                return await self._run(self.fallback_runner, inputs)
+            raise
+
 
 def get_chat_agent(seller_id: str = ""):
-    api_keys = _collect_api_keys()
-    if not api_keys:
-        raise ValueError("No Groq API keys found. Set GROQ_API_KEY in backend/.env.")
-
-    primary_model = _resolve_groq_model(settings.GROQ_CHAT_MODEL, "openai/gpt-oss-20b")
-    fallback_model = _resolve_groq_model(settings.GROQ_FALLBACK_MODEL, "openai/gpt-oss-120b")
-    primary_key = api_keys[0]
-    fallback_key = api_keys[1] if len(api_keys) > 1 else primary_key
-
-    primary_llm = ChatGroq(
-        api_key=primary_key,
-        model=primary_model,
-        temperature=0.2,
-        max_tokens=700,
-    )
-    fallback_llm = ChatGroq(
-        api_key=fallback_key,
-        model=fallback_model,
-        temperature=0.2,
-        max_tokens=700,
-    )
-    llm = primary_llm.with_fallbacks([fallback_llm])
-
     tools = _build_tools(seller_id)
+    groq_llms = _build_groq_llms()
+    groq_llm = None
+    if groq_llms:
+        groq_llm = groq_llms[0] if len(groq_llms) == 1 else groq_llms[0].with_fallbacks(groq_llms[1:])
 
-    system_prompt = """You are the Brew Boulevard AI Business Analyst. Answer EVERY business question using live tools plus the snapshot below. Never say you cannot access data if a tool exists.
+    system_prompt = """You are CommercePulse, a senior ecommerce business analyst for this seller. You MUST answer every business question with live numbers from tools. Never refuse a commerce question. Never say you cannot access data if a tool exists.
 
 LIVE SNAPSHOT:
 {context_str}
 
-Always pick the right tool before answering (you may call more than one):
-- Overview / how is business / KPIs → fetch_dashboard_kpis
-- Revenue / marketplace split / AOV → fetch_revenue_by_marketplace
-- Top products / SKU performance → fetch_all_products_metrics
+Tool routing (call one or more before answering):
+- Unsure / general / "how is business" / strategy → fetch_business_overview
+- KPIs / revenue / orders / cancellations / returns → fetch_dashboard_kpis
+- Order pipeline / pending / delivered / cancelled counts → fetch_orders_stats
+- Marketplace split / AOV / channel mix → fetch_revenue_by_marketplace
+- Category mix → fetch_revenue_by_category
+- Top products / SKU ranking → fetch_all_products_metrics
 - One product (name, SKU, or product_id) → fetch_product_metrics
-- Inventory / low stock / stockouts → fetch_inventory_alerts
-- Ads / ROAS / spend / CTR → fetch_ad_performance
-- Logistics / RTO / delivery days → fetch_logistics_performance
-- Customers / top buyers → fetch_top_customers
+- Inventory / low stock / stockouts / reorder → fetch_inventory_alerts
+- Ads / ROAS / spend / CTR / marketing → fetch_ad_performance
+- Logistics / RTO / delivery days / shipping → fetch_logistics_performance
+- Customers / top buyers / VIP → fetch_top_customers
 - Margins / pricing / profitability → fetch_pricing_margins
 - Payouts / Razorpay / settlements / UTR / MDR / unmatched cash → fetch_payments_summary
 
 Rules:
-1. Never invent numbers. If a tool returns empty, say so and suggest Data Import.
-2. Quote rupees, units, and percentages from the tool results.
-3. Keep answers under 180 words with bullets and one recommended action.
-4. If the question is unclear, still answer with dashboard KPIs and ask a short follow-up.
+1. Always call at least one tool. If the question is vague, call fetch_business_overview.
+2. Never invent numbers. If a tool is empty, say the dataset has no rows for that window and suggest Data Import.
+3. Quote ₹ amounts, units, and percentages from tool results. Name marketplaces and SKUs.
+4. Keep answers under 220 words: 3–6 bullets, then one recommended next action.
+5. For strategy / what-if questions, ground advice in the live metrics, then give a practical action.
+6. If the user asks something non-business, briefly redirect and still offer a KPI snapshot.
 """
 
-    try:
-        agent = create_agent(model=llm, tools=tools)
-    except TypeError:
-        agent = create_agent(llm, tools)
-    except Exception:
-        logger.exception("create_agent failed")
-        raise
-    return ChatAgentWrapper(agent, system_prompt)
+    or_key = _openrouter_key()
+    use_openrouter = (not _skip_openrouter) and or_key.startswith("sk-or-")
+
+    groq_agent = _make_agent(groq_llm, tools) if groq_llm is not None else None
+
+    if use_openrouter:
+        or_llms = _build_openrouter_llm(or_key)
+        or_llm = or_llms[0] if len(or_llms) == 1 else or_llms[0].with_fallbacks(or_llms[1:])
+        return ChatAgentWrapper(_make_agent(or_llm, tools), system_prompt, groq_agent)
+
+    if groq_agent is None:
+        raise ValueError(
+            "No chat API key found. Set OPENROUTER_API_KEY (sk-or-...) or GROQ_API_KEY in backend/.env."
+        )
+    return ChatAgentWrapper(groq_agent, system_prompt)
