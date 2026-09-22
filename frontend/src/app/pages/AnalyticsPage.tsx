@@ -48,7 +48,7 @@ export function AnalyticsPage() {
     async function fetchData() {
       try {
         const sellerId = await ensureSeller();
-        const response = await apiClient.get(`/analytics/dashboard?seller_id=${sellerId}&days=365`);
+        const response = await apiClient.get(`/analytics/dashboard?seller_id=${sellerId}&days=30`);
         
         if (response.kpis) {
           // Use real order data to infer traffic/conversion for demo purposes

@@ -44,7 +44,7 @@ services:
       APP_ENV: ${APP_ENV:-development}
       API_KEY: ${API_KEY:-dev-api-key}
       REDIS_URL: redis://redis:6379/0
-      AI_AGENTS_URL: http://ai_agents:8001
+      AI_AGENTS_URL: http://ai_agents:8002
     volumes:
       - ./app:/app/app:ro
       - model_cache:/root/.cache/huggingface
@@ -130,12 +130,12 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       APP_ENV: ${APP_ENV:-development}
-    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001"]
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8002"]
     volumes:
       - ../ai_agents/app:/app/app:ro
       - ../ai_agents/main.py:/app/main.py:ro
     ports:
-      - "8001:8001"
+      - "8002:8002"
 
 volumes:
   model_cache:

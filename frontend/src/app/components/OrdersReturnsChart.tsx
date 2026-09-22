@@ -20,8 +20,7 @@ export function OrdersReturnsChart() {
     async function fetchData() {
       try {
         const sellerId = await ensureSeller();
-        // Fetch last 365 days for a clearer bar chart view
-        const response = await apiClient.get(`/analytics/orders/trend?seller_id=${sellerId}&days=365`);
+        const response = await apiClient.get(`/analytics/orders/trend?seller_id=${sellerId}&days=30`);
         
         // Format dates for display
         const formattedData = response.data.map((item: any) => {

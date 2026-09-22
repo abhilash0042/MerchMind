@@ -5,7 +5,7 @@ This directory contains the core services and infrastructure for the CommercePul
 ## 🏗️ Production Services
 - **[backend/](./backend)**: FastAPI Analytics & Ingestion Engine (Port 8010)
 - **[frontend/](./frontend)**: React + Vite + TailwindCSS Dashboard (Port 4000)
-- **[ai_agents/](./ai_agents)**: LangGraph Multi-Agent Strategic Engine (Port 8002 locally; 8001 in Docker)
+- **[ai_agents/](./ai_agents)**: LangGraph Multi-Agent Strategic Engine (Port 8002)
 
 ## 🛠️ Infrastructure & Data
 - **[infrastructure/](./infrastructure)**: Deployment templates and container configurations.

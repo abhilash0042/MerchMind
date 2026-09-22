@@ -53,8 +53,8 @@ export function RevenuePage() {
         
         // Fetch dashboard KPIs, category revenue, and monthly trend
         const [dashRes, catRes, trendRes] = await Promise.all([
-          apiClient.get(`/analytics/dashboard?seller_id=${sellerId}&days=365`),
-          apiClient.get(`/analytics/revenue/by-category?seller_id=${sellerId}&days=365`),
+          apiClient.get(`/analytics/dashboard?seller_id=${sellerId}&days=30`),
+          apiClient.get(`/analytics/revenue/by-category?seller_id=${sellerId}&days=30`),
           apiClient.get(`/analytics/revenue/monthly?seller_id=${sellerId}&months=12`)
         ]);
 

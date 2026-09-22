@@ -1,5 +1,5 @@
 """Analytics routes — GET /analytics/*"""
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Optional
 import uuid as _uuid
 
@@ -13,6 +13,40 @@ from app.core.security import enforce_seller_scope
 from fastapi_cache.decorator import cache
 
 router = APIRouter()
+
+_LOOKBACK_TABLES = {
+    ("orders", "order_date"),
+    ("traffic_metrics", "metric_date"),
+    ("logistics_metrics", "snapshot_date"),
+}
+
+
+def _as_date(value) -> date:
+    if value is None:
+        return date.today()
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    return date.today()
+
+
+async def lookback_since(
+    db: AsyncSession,
+    seller_id: str,
+    days: int,
+    table: str = "orders",
+    date_col: str = "order_date",
+) -> date:
+    """Window relative to the seller's latest data date, not calendar today."""
+    if (table, date_col) not in _LOOKBACK_TABLES:
+        raise ValueError(f"Unsupported lookback: {table}.{date_col}")
+    result = await db.execute(
+        text(f"SELECT MAX({date_col}) FROM {table} WHERE seller_id = CAST(:seller_id AS UUID)"),
+        {"seller_id": seller_id},
+    )
+    as_of = _as_date(result.scalar())
+    return as_of - timedelta(days=days)
 
 
 @router.get("/debug-db", summary="Resolve an active seller_id for local AI orchestrator")
@@ -32,7 +66,7 @@ async def dashboard_summary(
     db: AsyncSession = Depends(get_db),
     _scope: str = Depends(enforce_seller_scope),
 ):
-    since = date.today() - timedelta(days=days)
+    since = await lookback_since(db, seller_id, days)
     
     # Revenue and Orders
     rev_sql = text("""
@@ -86,7 +120,7 @@ async def revenue_summary(
     db:        AsyncSession = Depends(get_db),
     _scope:    str = Depends(enforce_seller_scope),
 ):
-    since = date.today() - timedelta(days=days)
+    since = await lookback_since(db, seller_id, days)
     sql = text("""
         SELECT
             marketplace,
@@ -122,7 +156,7 @@ async def orders_trend(
     db:        AsyncSession = Depends(get_db),
     _scope:    str = Depends(enforce_seller_scope),
 ):
-    since = date.today() - timedelta(days=days)
+    since = await lookback_since(db, seller_id, days)
     sql = text("""
         SELECT
             order_date,
@@ -253,7 +287,7 @@ async def traffic_funnel(
     db:        AsyncSession = Depends(get_db),
     _scope:    str = Depends(enforce_seller_scope),
 ):
-    since = date.today() - timedelta(days=days)
+    since = await lookback_since(db, seller_id, days, "traffic_metrics", "metric_date")
     sql = text("""
         SELECT
             p.sku, p.product_name, p.category,
@@ -301,7 +335,7 @@ async def logistics_rto_rate(
     db:        AsyncSession = Depends(get_db),
     _scope:    str = Depends(enforce_seller_scope),
 ):
-    since = date.today() - timedelta(days=days)
+    since = await lookback_since(db, seller_id, days, "logistics_metrics", "snapshot_date")
     sql = text("""
         SELECT
             marketplace,
@@ -334,7 +368,7 @@ async def dashboard(
     db:        AsyncSession = Depends(get_db),
     _scope:    str = Depends(enforce_seller_scope),
 ):
-    since = date.today() - timedelta(days=days)
+    since = await lookback_since(db, seller_id, days)
 
     revenue_sql = text("""
         SELECT
@@ -441,7 +475,7 @@ async def orders_stats(
     db:        AsyncSession = Depends(get_db),
     _scope:    str = Depends(enforce_seller_scope),
 ):
-    since = date.today() - timedelta(days=days)
+    since = await lookback_since(db, seller_id, days)
     sql = text("""
         SELECT
             COUNT(*)                                               AS total_orders,
@@ -524,7 +558,7 @@ async def revenue_by_category(
     db:        AsyncSession = Depends(get_db),
     _scope:    str = Depends(enforce_seller_scope),
 ):
-    since = date.today() - timedelta(days=days)
+    since = await lookback_since(db, seller_id, days)
     sql = text("""
         SELECT
             COALESCE(p.category, 'Uncategorized') AS category,
@@ -559,7 +593,12 @@ async def revenue_monthly(
             SUM((selling_price * quantity) - COALESCE(discount, 0) - COALESCE(tax, 0) - COALESCE(shipping_fee, 0)) AS profit
         FROM orders
         WHERE seller_id = CAST(:seller_id AS UUID)
-          AND order_date >= (CURRENT_DATE - INTERVAL '1 month' * :months)
+          AND order_date >= (
+              COALESCE(
+                  (SELECT MAX(order_date) FROM orders o2 WHERE o2.seller_id = CAST(:seller_id AS UUID)),
+                  CURRENT_DATE
+              ) - INTERVAL '1 month' * :months
+          )
         GROUP BY TO_CHAR(order_date, 'Mon'), EXTRACT(YEAR FROM order_date), EXTRACT(MONTH FROM order_date)
         ORDER BY year, month_num
     """)

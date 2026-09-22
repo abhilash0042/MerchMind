@@ -10,7 +10,7 @@ pinned: false
 
 # CommercePulse AI Agents Strategic Engine - Hugging Face Spaces Deployment
 
-This folder contains the LangGraph Multi-Agent strategic recommendation engine. It runs on a separate port (`8001`) and is hosted as a separate **Hugging Face Space** for free ($0/month).
+This folder contains the LangGraph Multi-Agent strategic recommendation engine. It runs on a separate port (`8002`) and is hosted as a separate **Hugging Face Space** for free ($0/month).
 
 ## 🚀 Deployment Steps (AI Agents Space)
 

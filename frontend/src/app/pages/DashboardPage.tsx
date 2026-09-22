@@ -38,7 +38,7 @@ export function DashboardPage() {
     async function fetchData() {
       try {
         const sellerId = await ensureSeller();
-        const data = await apiClient.get(`/analytics/dashboard?seller_id=${sellerId}&days=365`);
+        const data = await apiClient.get(`/analytics/dashboard?seller_id=${sellerId}&days=30`);
         setDashboardData(data);
       } catch (error) {
         console.error("Error fetching dashboard data:", error);

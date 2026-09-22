@@ -55,7 +55,7 @@ async def main():
             else:
                 print(f"⚠️ AI Agents API returned status: {resp.status_code}")
     except httpx.ConnectError:
-        print(f"❌ AI Agents API Failed: Connection Refused (port 8001).")
+        print(f"❌ AI Agents API Failed: Connection Refused ({ai_url}).")
     except Exception as e:
         print(f"❌ AI Agents API Failed: {e}")
 

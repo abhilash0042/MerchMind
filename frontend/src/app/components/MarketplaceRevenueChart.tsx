@@ -19,7 +19,7 @@ export function MarketplaceRevenueChart() {
     async function fetchData() {
       try {
         const sellerId = await ensureSeller();
-        const response = await apiClient.get(`/analytics/revenue?seller_id=${sellerId}&days=365`);
+        const response = await apiClient.get(`/analytics/revenue?seller_id=${sellerId}&days=30`);
         
         // Map data to the format expected by Recharts
         const formattedData = response.data.map((item: any) => ({

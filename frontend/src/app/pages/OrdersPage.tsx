@@ -52,7 +52,7 @@ export function OrdersPage() {
         // Fetch list and stats in parallel
         const [listRes, statsRes] = await Promise.all([
           apiClient.get(`/analytics/orders/list?seller_id=${sellerId}&limit=50`),
-          apiClient.get(`/analytics/orders/stats?seller_id=${sellerId}&days=365`)
+          apiClient.get(`/analytics/orders/stats?seller_id=${sellerId}&days=30`)
         ]);
 
         if (listRes.data && listRes.data.length > 0) {

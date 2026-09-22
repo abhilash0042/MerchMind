@@ -61,7 +61,7 @@ export function AIProductAnalysisPage() {
       await loadData();
     } catch (error: any) {
       console.error("Failed to trigger analysis:", error);
-      alert(error.response?.data?.detail || "The AI Agent service is currently unreachable or failed to process this request. Please ensure the AI server is running on port 8001.");
+      alert(error.response?.data?.detail || "The AI Agent service is currently unreachable or failed to process this request. Please ensure the AI server is running on port 8002.");
     } finally {
       setIsAnalyzing(false);
     }

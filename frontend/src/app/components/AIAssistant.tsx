@@ -41,8 +41,7 @@ export function AIAssistant() {
   const loadContext = async () => {
     try {
       const sellerId = await ensureSeller();
-      // Fetch high-level dashboard summary to give the AI context (matching the 365 days of the main dashboard)
-      const dashboard = await apiClient.get(`/analytics/dashboard/summary?seller_id=${sellerId}&days=365`);
+      const dashboard = await apiClient.get(`/analytics/dashboard/summary?seller_id=${sellerId}&days=30`);
       setContextData(dashboard);
     } catch (err) {
       console.error("Failed to load AI context:", err);

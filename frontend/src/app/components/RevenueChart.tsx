@@ -17,7 +17,7 @@ const timeRanges = [
 ];
 
 export function RevenueChart() {
-  const [selectedRange, setSelectedRange] = useState(timeRanges[2]);
+  const [selectedRange, setSelectedRange] = useState(timeRanges[0]);
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
