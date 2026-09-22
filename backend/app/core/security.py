@@ -56,12 +56,16 @@ async def enforce_seller_scope(
     if seller_id is None:
         return x_seller_id  # may also be None, which is fine (no scope)
 
-    if x_seller_id is not None and x_seller_id != seller_id:
+    # FastAPI can inject a malformed query value if the client appended
+    # seller_id twice (e.g. ?seller_id=uuid?seller_id=uuid). Compare the
+    # UUID prefix so a matching header is not rejected as a scope violation.
+    query_id = seller_id.split("?")[0].split("&")[0].strip()
+    if x_seller_id is not None and x_seller_id != query_id and x_seller_id != seller_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Seller scope violation",
         )
-    return seller_id
+    return query_id or seller_id
 
 
 # ── In-memory rate limiting (best-effort) ────────────────────────

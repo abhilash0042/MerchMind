@@ -36,14 +36,18 @@ export const apiClient = {
 
   async post(endpoint: string, data: Record<string, unknown>, sellerId?: string) {
     const sid = sellerId || _sellerId;
-    const qs = sid ? `?seller_id=${encodeURIComponent(sid)}` : '';
-    const url = `${API_BASE_URL}${endpoint}${qs}`;
+    let path = endpoint;
+    if (sid && !/[?&]seller_id=/.test(path)) {
+      path += path.includes('?') ? '&' : '?';
+      path += `seller_id=${encodeURIComponent(sid)}`;
+    }
+    const url = `${API_BASE_URL}${path}`;
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'X-API-Key': API_KEY,
     };
-    if (_sellerId) {
-      headers['X-Seller-Id'] = _sellerId;
+    if (sid) {
+      headers['X-Seller-Id'] = sid;
     }
     const response = await fetch(url, {
       method: 'POST',

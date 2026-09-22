@@ -69,7 +69,7 @@ export function AIAssistant() {
       }
     };
 
-    const response = await apiClient.post(`/ai/chat?seller_id=${sellerId}`, payload);
+    const response = await apiClient.post('/ai/chat', payload, sellerId);
     return response.reply;
   };
 
