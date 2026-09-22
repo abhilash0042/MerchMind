@@ -99,6 +99,22 @@ def _build_tools(default_seller_id: str):
     ]
 
 
+# Groq retired several Llama 3.x models; remap stale .env values automatically.
+_DEPRECATED_GROQ_MODELS = {
+    "llama-3.1-8b-instant",
+    "llama-3.3-70b-versatile",
+    "llama3-8b-8192",
+    "mixtral-8x7b-32768",
+}
+
+
+def _resolve_groq_model(preferred: str, default: str) -> str:
+    model = (preferred or "").strip() or default
+    if model in _DEPRECATED_GROQ_MODELS:
+        return default
+    return model
+
+
 def _collect_api_keys():
     """Collect Groq keys from Settings (loaded from .env) and process environment."""
     keys = []
@@ -150,8 +166,10 @@ def get_chat_agent(seller_id: str = ""):
     if not api_keys:
         raise ValueError("No Groq API keys found. Set GROQ_API_KEY in backend/.env.")
 
-    primary_model = settings.GROQ_CHAT_MODEL or "llama-3.1-8b-instant"
+    primary_model = _resolve_groq_model(settings.GROQ_CHAT_MODEL, "openai/gpt-oss-20b")
+    fallback_model = _resolve_groq_model(settings.GROQ_FALLBACK_MODEL, "openai/gpt-oss-120b")
     primary_key = api_keys[0]
+    fallback_key = api_keys[1] if len(api_keys) > 1 else primary_key
 
     primary_llm = ChatGroq(
         api_key=primary_key,
@@ -159,6 +177,13 @@ def get_chat_agent(seller_id: str = ""):
         temperature=0.2,
         max_tokens=700,
     )
+    fallback_llm = ChatGroq(
+        api_key=fallback_key,
+        model=fallback_model,
+        temperature=0.2,
+        max_tokens=700,
+    )
+    llm = primary_llm.with_fallbacks([fallback_llm])
 
     tools = _build_tools(seller_id)
 
@@ -183,9 +208,9 @@ If the user asks about payouts, Razorpay, settlements, UTR, STL batches, MDR, GS
 """
 
     try:
-        agent = create_agent(model=primary_llm, tools=tools)
+        agent = create_agent(model=llm, tools=tools)
     except TypeError:
-        agent = create_agent(primary_llm, tools)
+        agent = create_agent(llm, tools)
     except Exception:
         logger.exception("create_agent failed")
         raise

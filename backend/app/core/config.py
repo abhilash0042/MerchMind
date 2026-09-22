@@ -39,8 +39,8 @@ class Settings(BaseSettings):
     GROQ_API_KEY_2: str = ""
     GROQ_API_KEY_3: str = ""
     FALLBACK_GROQ_API_KEY: str = ""
-    GROQ_CHAT_MODEL: str = "llama-3.1-8b-instant"
-    GROQ_FALLBACK_MODEL: str = "openai/gpt-oss-20b"
+    GROQ_CHAT_MODEL: str = "openai/gpt-oss-20b"
+    GROQ_FALLBACK_MODEL: str = "openai/gpt-oss-120b"
 
     @property
     def _pw(self) -> str:
